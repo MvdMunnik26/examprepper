@@ -36,25 +36,19 @@ document.getElementById('themeBtn').onclick = () =>
   applyTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
 applyTheme(localStorage.getItem('theme') || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
 
-// ---------- tiny markdown renderer (headings, bold, italics, lists, code, paragraphs) ----------
-function md(text) {
-  const lines = esc(text).split('\n');
-  let html = '', inList = false;
-  const inline = s => s
-    .replace(/`([^`]+)`/g, '<code>$1</code>')
-    .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-    .replace(/\*([^*]+)\*/g, '<em>$1</em>');
-  for (const line of lines) {
-    const l = line.trim();
-    const list = /^[-*] (.*)/.exec(l) || /^\d+\. (.*)/.exec(l);
-    if (list) { if (!inList) { html += '<ul>'; inList = true; } html += `<li>${inline(list[1])}</li>`; continue; }
-    if (inList) { html += '</ul>'; inList = false; }
-    const h = /^(#{1,4}) (.*)/.exec(l);
-    if (h) { html += `<h${h[1].length + 1}>${inline(h[2])}</h${h[1].length + 1}>`; continue; }
-    if (l) html += `<p>${inline(l)}</p>`;
-  }
-  if (inList) html += '</ul>';
-  return html;
+// ---------- "explore further" source link ----------
+// Each question stores a source_url + source_title (generated with the question).
+// The link opens the source webpage in a NEW browser tab. If no stored URL exists
+// (e.g. questions generated before this feature), fall back to a web search.
+function sourceLink(q) {
+  const hasUrl = q.source_url && /^https?:\/\//i.test(q.source_url);
+  const url = hasUrl
+    ? q.source_url
+    : 'https://duckduckgo.com/?q=' + encodeURIComponent(q.learn_more_query || q.question || '');
+  const label = hasUrl
+    ? `📚 Read more: ${esc(q.source_title || q.source_url)}`
+    : '📚 Explore this topic on the web';
+  return `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${label} ↗</a>`;
 }
 
 // ---------- router ----------
@@ -64,7 +58,6 @@ async function go(view, arg) {
   if (view === 'dashboard') return renderDashboard();
   if (view === 'admin') return renderAdmin();
   if (view === 'quiz') return startQuiz(arg.topicId, arg.mode);
-  if (view === 'deepdive') return renderDeepDive(arg);
 }
 
 // ---------- auth ----------
@@ -283,7 +276,7 @@ function renderQuestion() {
         <div class="explanation ${chosen === q.correct_index ? 'good' : 'bad'}">
           <strong>${chosen === q.correct_index ? '✓ Correct!' : `✗ Not quite — the answer is ${'ABCD'[q.correct_index]}.`}</strong>
           <p style="margin:8px 0 12px">${esc(q.explanation)}</p>
-          <a href="#" onclick="event.preventDefault();go('deepdive',${q.id})">📚 Explore this topic in depth →</a>
+          ${sourceLink(q)}
         </div>` : ''}
     </div>
     <div class="quiz-nav">
@@ -357,31 +350,11 @@ function renderResults(result, duration) {
         </p>
         <div class="explanation ${correct ? 'good' : 'bad'}" style="margin-top:10px">
           ${esc(q.explanation)}
-          <div style="margin-top:8px"><a href="#" onclick="event.preventDefault();go('deepdive',${q.id})">📚 Explore this topic in depth →</a></div>
+          <div style="margin-top:8px">${sourceLink(q)}</div>
         </div>
       </div>`;
     }).join('')}`;
   window.scrollTo(0, 0);
-}
-
-// ---------- deep dive ----------
-async function renderDeepDive(questionId) {
-  $app.innerHTML = `<div class="empty"><span class="spinner"></span> Writing your deep-dive article…</div>`;
-  try {
-    const d = await api(`/api/questions/${questionId}/deepdive`);
-    $app.innerHTML = `
-      <div class="crumb"><a href="#" onclick="event.preventDefault();go('dashboard')">← Back</a> · ${esc(d.topic)}</div>
-      <div class="card article">
-        <p style="color:var(--text-dim);font-size:.9rem;margin-top:0">Deep dive for: <em>${esc(d.question)}</em></p>
-        ${md(d.deep_dive)}
-        <hr style="border:none;border-top:1px solid var(--border);margin:24px 0">
-        <p>🔎 Keep exploring on the web:
-          <a href="https://www.google.com/search?q=${encodeURIComponent(d.learn_more_query)}" target="_blank" rel="noopener">${esc(d.learn_more_query)}</a></p>
-      </div>`;
-    window.scrollTo(0, 0);
-  } catch (e) {
-    $app.innerHTML = `<div class="empty">⚠ ${esc(e.message)}<br><br><button onclick="go('dashboard')">Back to topics</button></div>`;
-  }
 }
 
 // ---------- admin ----------
@@ -421,7 +394,7 @@ async function renderAdmin(tab = 'users') {
       </tbody></table>` : ''}
     ${tab === 'settings' ? `
       <h3 style="margin-top:0">Anthropic API key</h3>
-      <p style="color:var(--text-dim);font-size:.92rem">Used to research topics and generate questions, explanations and deep-dive articles.
+      <p style="color:var(--text-dim);font-size:.92rem">Used to research topics and generate questions, explanations and source links.
       Get a key at <a href="https://console.anthropic.com" target="_blank" rel="noopener">console.anthropic.com</a>.</p>
       <p>Status: ${settings.api_key_set
         ? `<span class="badge ready">configured</span> <code>${esc(settings.api_key_hint)}</code>`

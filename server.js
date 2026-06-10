@@ -61,8 +61,8 @@ app.post('/api/register', (req, res) => {
   const hash = bcrypt.hashSync(password, 10);
   const info = db.prepare('INSERT INTO users (username, password_hash, is_admin) VALUES (?, ?, ?)')
     .run(username.trim(), hash, isFirstUser ? 1 : 0);
-  req.session.userId = Number(info.lastInsertRowid);
-  res.json({ id: Number(info.lastInsertRowid), username: username.trim(), is_admin: isFirstUser ? 1 : 0 });
+  req.session.userId = info.lastInsertRowid;
+  res.json({ id: info.lastInsertRowid, username: username.trim(), is_admin: isFirstUser ? 1 : 0 });
 });
 
 app.post('/api/login', (req, res) => {
@@ -137,14 +137,14 @@ app.post('/api/topics/:id/generate', requireAuth, async (req, res) => {
   try {
     const questions = await ai.generateQuestions(topic.title, topic.description, topic.num_questions, topic.difficulty);
     const insert = db.prepare(`
-      INSERT INTO questions (topic_id, question, options_json, correct_index, difficulty, explanation, learn_more_query)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO questions (topic_id, question, options_json, correct_index, difficulty, explanation, learn_more_query, source_url, source_title)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
     db.exec('BEGIN');
     try {
       db.prepare('DELETE FROM questions WHERE topic_id = ?').run(topic.id);
       for (const q of questions) {
-        insert.run(topic.id, q.question, JSON.stringify(q.options), q.correct_index, q.difficulty, q.explanation, q.learn_more_query);
+        insert.run(topic.id, q.question, JSON.stringify(q.options), q.correct_index, q.difficulty, q.explanation, q.learn_more_query, q.source_url, q.source_title);
       }
       db.prepare("UPDATE topics SET status = 'ready', status_message = '' WHERE id = ?").run(topic.id);
       db.exec('COMMIT');
@@ -204,27 +204,8 @@ app.get('/api/topics/:id/attempts', requireAuth, (req, res) => {
   ).all(topic.id, req.session.userId));
 });
 
-// ---------- deep dive (explore a question's concept in detail) ----------
-app.get('/api/questions/:id/deepdive', requireAuth, async (req, res) => {
-  const q = db.prepare('SELECT * FROM questions WHERE id = ?').get(req.params.id);
-  if (!q) return res.status(404).json({ error: 'Question not found' });
-  const topic = db.prepare('SELECT * FROM topics WHERE id = ?').get(q.topic_id);
-  const user = db.prepare('SELECT is_admin FROM users WHERE id = ?').get(req.session.userId);
-  if (topic.user_id !== req.session.userId && !user.is_admin) {
-    return res.status(403).json({ error: 'Not your question' });
-  }
-  if (q.deep_dive) {
-    return res.json({ question: q.question, topic: topic.title, deep_dive: q.deep_dive, learn_more_query: q.learn_more_query });
-  }
-  try {
-    const options = JSON.parse(q.options_json);
-    const article = await ai.generateDeepDive(topic.title, q.question, options[q.correct_index], q.explanation);
-    db.prepare('UPDATE questions SET deep_dive = ? WHERE id = ?').run(article, q.id);
-    res.json({ question: q.question, topic: topic.title, deep_dive: article, learn_more_query: q.learn_more_query });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
+// Deep-dive is now a stored source_url returned with each question (see /questions),
+// opened directly in a new browser tab — no on-the-fly generation endpoint needed.
 
 // ---------- admin ----------
 app.get('/api/admin/users', requireAdmin, (req, res) => {
