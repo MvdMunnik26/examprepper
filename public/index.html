@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ExamPrepper</title>
+  <link rel="stylesheet" href="/style.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='80' font-size='80'>🎓</text></svg>">
+</head>
+<body>
+  <header id="header" style="display:none">
+    <div class="logo" onclick="go('dashboard')">🎓 Exam<span>Prepper</span></div>
+    <div class="actions">
+      <button class="ghost" id="adminBtn" style="display:none" onclick="go('admin')">Admin</button>
+      <button class="ghost" id="themeBtn" title="Toggle theme">🌙</button>
+      <span id="whoami" style="color:var(--text-dim);font-size:.9rem"></span>
+      <button onclick="logout()">Log out</button>
+    </div>
+  </header>
+  <main id="app"></main>
+  <script src="/app.js"></script>
+</body>
+</html>
