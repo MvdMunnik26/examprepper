@@ -36,8 +36,10 @@ CREATE TABLE IF NOT EXISTS questions (
   correct_index INTEGER NOT NULL,      -- 0-3
   difficulty TEXT NOT NULL DEFAULT 'medium',
   explanation TEXT NOT NULL DEFAULT '',
-  learn_more_query TEXT NOT NULL DEFAULT '', -- search query for external exploration
-  deep_dive TEXT DEFAULT NULL          -- cached AI-generated deep-dive article (markdown)
+  learn_more_query TEXT NOT NULL DEFAULT '', -- fallback web-search query
+  source_url TEXT NOT NULL DEFAULT '',       -- link to a source webpage to explore further (opens in new tab)
+  source_title TEXT NOT NULL DEFAULT '',     -- human-readable title of that source page
+  deep_dive TEXT DEFAULT NULL                -- (legacy, unused) previously cached AI article
 );
 
 CREATE TABLE IF NOT EXISTS attempts (
@@ -57,6 +59,16 @@ CREATE TABLE IF NOT EXISTS app_settings (
   value TEXT
 );
 `);
+
+// Lightweight migration: add newer columns to databases created before they existed.
+const questionCols = db.prepare('PRAGMA table_info(questions)').all().map(c => c.name);
+const addColumns = [
+  ['source_url', "TEXT NOT NULL DEFAULT ''"],
+  ['source_title', "TEXT NOT NULL DEFAULT ''"]
+];
+for (const [name, ddl] of addColumns) {
+  if (!questionCols.includes(name)) db.exec('ALTER TABLE questions ADD COLUMN ' + name + ' ' + ddl);
+}
 
 // Helpers for app settings (e.g. the Anthropic API key)
 function getSetting(key) {

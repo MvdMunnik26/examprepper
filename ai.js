@@ -1,4 +1,4 @@
-// ai.js — talks to the Claude API to research topics, generate questions and deep-dives
+// ai.js — talks to the Claude API to research topics and generate questions
 const { getSetting } = require('./db');
 
 const API_URL = 'https://api.anthropic.com/v1/messages';
@@ -60,7 +60,9 @@ Rules:
 - Distractors must be plausible, not obviously wrong.
 - Cover the breadth of the topic, not just one subarea.
 - "explanation" must explain WHY the correct answer is right AND why the common wrong choices are wrong (2-4 sentences).
-- "learn_more_query" is a short web search query a student could use to study this question's concept further.
+- "source_url" must be a real, currently-working URL to an authoritative reference page where the student can read more about THIS question's specific concept. Strongly prefer stable, long-lived pages: the relevant Wikipedia article, official documentation, standards bodies, or well-known educational sites. Use the exact canonical URL of the page (not a homepage, not a search). Only provide a URL you are confident exists.
+- "source_title" is the short human-readable title of that page (e.g. the article or doc page name).
+- "learn_more_query" is a short web search query, used only as a fallback if the URL is unavailable.
 
 Respond with ONLY a JSON array, no other text:
 [
@@ -70,6 +72,8 @@ Respond with ONLY a JSON array, no other text:
     "correct_index": 0,
     "difficulty": "easy|medium|hard",
     "explanation": "...",
+    "source_url": "https://en.wikipedia.org/wiki/...",
+    "source_title": "...",
     "learn_more_query": "..."
   }
 ]`;
@@ -89,20 +93,11 @@ Respond with ONLY a JSON array, no other text:
       correct_index: q.correct_index,
       difficulty: ['easy', 'medium', 'hard'].includes(q.difficulty) ? q.difficulty : 'medium',
       explanation: String(q.explanation || ''),
-      learn_more_query: String(q.learn_more_query || q.question)
+      learn_more_query: String(q.learn_more_query || q.question),
+      // Keep a well-formed http(s) URL; otherwise leave blank and let the UI fall back to a search link.
+      source_url: /^https?:\/\/.+/i.test(String(q.source_url || '')) ? String(q.source_url) : '',
+      source_title: String(q.source_title || '')
     }));
 }
 
-async function generateDeepDive(topicTitle, question, correctAnswer, explanation) {
-  const prompt = `A student is studying "${topicTitle}". They just answered this exam question:
-
-Question: ${question}
-Correct answer: ${correctAnswer}
-Explanation given: ${explanation}
-
-Write a clear deep-dive study article (400-600 words) that teaches the underlying concept thoroughly. Use markdown with headings, and include: the core concept explained from first principles, why it matters in practice, a worked example or analogy, common misconceptions, and 3 key takeaways at the end. Write directly to the student. Respond with only the markdown article.`;
-
-  return callClaude([{ role: 'user', content: prompt }], 4000);
-}
-
-module.exports = { generateQuestions, generateDeepDive, getApiKey };
+module.exports = { generateQuestions, getApiKey };
