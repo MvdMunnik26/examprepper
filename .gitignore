@@ -1,0 +1,3 @@
+node_modules/
+examprepper.db*
+*.log
