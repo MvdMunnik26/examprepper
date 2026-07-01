@@ -25,6 +25,9 @@ CREATE TABLE IF NOT EXISTS topics (
   timer_minutes INTEGER NOT NULL DEFAULT 20,
   status TEXT NOT NULL DEFAULT 'new', -- new | generating | ready | error
   status_message TEXT DEFAULT '',
+  material TEXT NOT NULL DEFAULT '',          -- optional pasted study material to ground generation
+  question_types TEXT NOT NULL DEFAULT 'single', -- single | mixed (adds multi-select, true/false, fill-in-the-blank)
+  is_shared INTEGER NOT NULL DEFAULT 0,       -- shared topics are visible to all users (read/practice only)
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -32,26 +35,51 @@ CREATE TABLE IF NOT EXISTS questions (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   topic_id INTEGER NOT NULL REFERENCES topics(id) ON DELETE CASCADE,
   question TEXT NOT NULL,
-  options_json TEXT NOT NULL,          -- JSON array of 4 answer options
-  correct_index INTEGER NOT NULL,      -- 0-3
+  options_json TEXT NOT NULL,          -- JSON array of answer options ([] for fillblank)
+  correct_index INTEGER NOT NULL,      -- kept for single/truefalse (first correct index; -1 for fillblank)
+  correct_json TEXT NOT NULL DEFAULT '', -- JSON array: option indices (single/multi/truefalse) or acceptable strings (fillblank)
+  qtype TEXT NOT NULL DEFAULT 'single',  -- single | multi | truefalse | fillblank
   difficulty TEXT NOT NULL DEFAULT 'medium',
   explanation TEXT NOT NULL DEFAULT '',
   learn_more_query TEXT NOT NULL DEFAULT '', -- fallback web-search query
   source_url TEXT NOT NULL DEFAULT '',       -- link to a source webpage to explore further (opens in new tab)
   source_title TEXT NOT NULL DEFAULT '',     -- human-readable title of that source page
-  deep_dive TEXT DEFAULT NULL                -- (legacy, unused) previously cached AI article
+  deep_dive TEXT DEFAULT NULL                -- (legacy, unused)
 );
 
 CREATE TABLE IF NOT EXISTS attempts (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   topic_id INTEGER NOT NULL REFERENCES topics(id) ON DELETE CASCADE,
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  mode TEXT NOT NULL,                  -- exam | review
+  mode TEXT NOT NULL,                  -- exam | review | weak
   score INTEGER,
   total INTEGER,
   duration_seconds INTEGER,
-  answers_json TEXT,                   -- JSON: [{questionId, chosenIndex}]
+  overtime INTEGER NOT NULL DEFAULT 0, -- exam finished past the time limit
+  session_id INTEGER,                  -- quiz_sessions.id this attempt came from
+  answers_json TEXT,                   -- JSON: [{questionId, chosen, correct}] — chosen uses CANONICAL option indices
   finished_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS quiz_sessions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  topic_id INTEGER NOT NULL REFERENCES topics(id) ON DELETE CASCADE,
+  mode TEXT NOT NULL,                  -- exam | review | weak
+  seed INTEGER NOT NULL,               -- drives deterministic question/option shuffling (stable across resume)
+  question_ids_json TEXT NOT NULL DEFAULT '[]', -- the question set frozen at session start
+  started_at TEXT NOT NULL DEFAULT (datetime('now')),
+  finished INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS question_stats (
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  question_id INTEGER NOT NULL REFERENCES questions(id) ON DELETE CASCADE,
+  correct_count INTEGER NOT NULL DEFAULT 0,
+  wrong_count INTEGER NOT NULL DEFAULT 0,
+  streak INTEGER NOT NULL DEFAULT 0,   -- consecutive correct answers; a question leaves the weak pool at streak >= 2
+  last_answered_at TEXT,
+  PRIMARY KEY (user_id, question_id)
 );
 
 CREATE TABLE IF NOT EXISTS app_settings (
@@ -60,15 +88,34 @@ CREATE TABLE IF NOT EXISTS app_settings (
 );
 `);
 
-// Lightweight migration: add newer columns to databases created before they existed.
-const questionCols = db.prepare('PRAGMA table_info(questions)').all().map(c => c.name);
-const addColumns = [
-  ['source_url', "TEXT NOT NULL DEFAULT ''"],
-  ['source_title', "TEXT NOT NULL DEFAULT ''"]
-];
-for (const [name, ddl] of addColumns) {
-  if (!questionCols.includes(name)) db.exec('ALTER TABLE questions ADD COLUMN ' + name + ' ' + ddl);
+// Lightweight migrations: add newer columns to databases created before they existed.
+function addColumns(table, cols) {
+  const existing = db.prepare(`PRAGMA table_info(${table})`).all().map(c => c.name);
+  for (const [name, ddl] of cols) {
+    if (!existing.includes(name)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${name} ${ddl}`);
+  }
 }
+addColumns('questions', [
+  ['source_url', "TEXT NOT NULL DEFAULT ''"],
+  ['source_title', "TEXT NOT NULL DEFAULT ''"],
+  ['correct_json', "TEXT NOT NULL DEFAULT ''"],
+  ['qtype', "TEXT NOT NULL DEFAULT 'single'"]
+]);
+addColumns('topics', [
+  ['material', "TEXT NOT NULL DEFAULT ''"],
+  ['question_types', "TEXT NOT NULL DEFAULT 'single'"],
+  ['is_shared', 'INTEGER NOT NULL DEFAULT 0']
+]);
+addColumns('attempts', [
+  ['overtime', 'INTEGER NOT NULL DEFAULT 0'],
+  ['session_id', 'INTEGER']
+]);
+
+// Backfill correct_json for questions created before question types existed.
+db.exec(`UPDATE questions SET correct_json = '[' || correct_index || ']' WHERE correct_json = '' AND correct_index >= 0`);
+
+// A server restart mid-generation would otherwise leave topics stuck on 'generating' forever.
+db.exec(`UPDATE topics SET status = 'error', status_message = 'Generation was interrupted by a server restart — try again.' WHERE status = 'generating'`);
 
 // Helpers for app settings (e.g. the Anthropic API key)
 function getSetting(key) {

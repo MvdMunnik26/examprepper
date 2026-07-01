@@ -1,6 +1,6 @@
 {
   "name": "examprepper",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "AI-powered exam preparation webapp",
   "main": "server.js",
   "scripts": {

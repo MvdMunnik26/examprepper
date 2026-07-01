@@ -164,6 +164,44 @@ th { color: var(--text-dim); font-size: .78rem; text-transform: uppercase; lette
   font-size: .9rem; z-index: 100; box-shadow: var(--shadow);
 }
 .empty { text-align: center; color: var(--text-dim); padding: 50px 0; }
+
+/* ---- question navigator (mock exam) ---- */
+.qnav { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 18px; }
+.qnav button {
+  width: 36px; height: 36px; padding: 0; font-size: .82rem; font-weight: 600;
+  border-radius: 8px; position: relative;
+}
+.qnav button.answered { background: color-mix(in srgb, var(--primary) 18%, var(--surface)); border-color: var(--primary); }
+.qnav button.current { outline: 2px solid var(--primary); outline-offset: 1px; }
+.qnav button.flagged::after {
+  content: ''; position: absolute; top: -3px; right: -3px; width: 10px; height: 10px;
+  border-radius: 50%; background: var(--amber);
+}
+.flag-btn { font-size: 1.1rem; opacity: .35; flex: none; }
+.flag-btn.on { opacity: 1; }
+.choose-hint { margin: -6px 0 10px; font-size: .85rem; color: var(--amber); font-weight: 600; }
+
+/* ---- keyboard hint ---- */
+.kbd-hint { text-align: center; color: var(--text-dim); font-size: .78rem; margin-top: 26px; }
+.kbd-hint kbd {
+  background: var(--surface2); border: 1px solid var(--border); border-bottom-width: 2px;
+  border-radius: 5px; padding: 1px 6px; font-family: inherit; font-size: .75rem;
+}
+
+/* ---- extra badges ---- */
+.badge.shared { background: color-mix(in srgb, var(--primary) 16%, transparent); color: var(--primary); }
+.badge.qtype { background: var(--surface2); color: var(--text-dim); text-transform: none; letter-spacing: 0; }
+
+/* ---- ask-the-AI follow-up ---- */
+.ask-box { margin-top: 14px; border-top: 1px dashed var(--border); padding-top: 12px; }
+.ask-row { display: flex; gap: 8px; align-items: center; }
+.ask-row input { flex: 1; padding: 8px 12px; font-size: .9rem; }
+.ask-q { font-size: .9rem; font-weight: 600; margin: 10px 0 4px; }
+.ask-a { font-size: .9rem; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; margin-bottom: 8px; white-space: pre-wrap; }
+
+/* ---- question bank ---- */
+.bank-q { margin-top: 10px; padding: 14px 18px; }
+
 .spinner {
   display: inline-block; width: 16px; height: 16px; border-radius: 50%;
   border: 2.5px solid var(--border); border-top-color: var(--primary);
