@@ -1,8 +1,10 @@
 // server.js — ExamPrepper backend
 const express = require('express');
 const session = require('express-session');
+const compression = require('compression');
 const bcrypt = require('bcryptjs');
 const path = require('path');
+const fs = require('fs');
 const crypto = require('crypto');
 const { db, getSetting, setSetting } = require('./db');
 const ai = require('./ai');
@@ -10,8 +12,18 @@ const ai = require('./ai');
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+app.set('trust proxy', 1); // behind a reverse proxy: honour X-Forwarded-Proto/-For
+app.disable('x-powered-by');
+app.use(compression());
 app.use(express.json({ limit: '2mb' })); // pasted study material can be large
-app.use(express.static(path.join(__dirname, 'public')));
+
+// Static assets are cache-busted with ?v= query strings, so they can cache long;
+// index.html is served by the '/' route below (with the origin injected).
+app.use(express.static(path.join(__dirname, 'public'), {
+  index: false,
+  maxAge: '7d',
+  setHeaders: (res, p) => { if (p.endsWith('.html')) res.setHeader('Cache-Control', 'no-cache'); }
+}));
 
 // Persist a session secret so logins survive server restarts
 let sessionSecret = getSetting('session_secret');
@@ -23,8 +35,31 @@ app.use(session({
   secret: sessionSecret,
   resave: false,
   saveUninitialized: false,
-  cookie: { httpOnly: true, maxAge: 1000 * 60 * 60 * 24 * 30 } // 30 days
+  // secure:'auto' → cookie is Secure on HTTPS (via the proxy) but still works on plain LAN HTTP
+  cookie: { httpOnly: true, sameSite: 'lax', secure: 'auto', maxAge: 1000 * 60 * 60 * 24 * 30 } // 30 days
 }));
+
+// Simple in-memory rate limiter for the auth endpoints (brute-force protection)
+function rateLimit(max, windowMs, what) {
+  const hits = new Map();
+  setInterval(() => {
+    const cutoff = Date.now() - windowMs;
+    for (const [ip, arr] of hits) {
+      const fresh = arr.filter(t => t > cutoff);
+      if (fresh.length) hits.set(ip, fresh); else hits.delete(ip);
+    }
+  }, windowMs).unref();
+  return (req, res, next) => {
+    const now = Date.now();
+    const arr = (hits.get(req.ip) || []).filter(t => t > now - windowMs);
+    if (arr.length >= max) {
+      return res.status(429).json({ error: `Too many ${what} attempts — try again in a few minutes.` });
+    }
+    arr.push(now);
+    hits.set(req.ip, arr);
+    next();
+  };
+}
 
 // ---------- middleware ----------
 function requireAuth(req, res, next) {
@@ -93,7 +128,7 @@ function parseQuestionRow(q) {
 const normText = s => String(s || '').toLowerCase().trim().replace(/\s+/g, ' ').replace(/[.。]$/, '');
 
 // ---------- auth ----------
-app.post('/api/register', (req, res) => {
+app.post('/api/register', rateLimit(15, 60 * 60 * 1000, 'registration'), (req, res) => {
   const { username, password } = req.body;
   if (!username || !password || username.trim().length < 2 || password.length < 6) {
     return res.status(400).json({ error: 'Username (min 2 chars) and password (min 6 chars) required' });
@@ -109,7 +144,7 @@ app.post('/api/register', (req, res) => {
   res.json({ id: info.lastInsertRowid, username: username.trim(), is_admin: isFirstUser ? 1 : 0 });
 });
 
-app.post('/api/login', (req, res) => {
+app.post('/api/login', rateLimit(30, 10 * 60 * 1000, 'login'), (req, res) => {
   const { username, password } = req.body;
   const user = db.prepare('SELECT * FROM users WHERE username = ?').get((username || '').trim());
   if (!user || !bcrypt.compareSync(password || '', user.password_hash)) {
@@ -618,8 +653,31 @@ app.put('/api/admin/settings', requireAdmin, (req, res) => {
   res.json({ ok: true });
 });
 
-// SPA fallback
-app.get('*', (req, res) => res.sendFile(path.join(__dirname, 'public', 'index.html')));
+// ---------- SEO endpoints & page serving ----------
+const indexHtml = fs.readFileSync(path.join(__dirname, 'public', 'index.html'), 'utf8');
+const originOf = req => `${req.protocol}://${req.get('host')}`;
+
+// The app has a single URL; canonical/og:url/og:image get the real origin injected.
+app.get(['/', '/index.html'], (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache');
+  res.type('html').send(indexHtml.replaceAll('__ORIGIN__', originOf(req)));
+});
+
+app.get('/robots.txt', (req, res) => {
+  res.type('text/plain').send(`User-agent: *\nDisallow: /api/\nSitemap: ${originOf(req)}/sitemap.xml\n`);
+});
+
+app.get('/sitemap.xml', (req, res) => {
+  res.type('application/xml').send(
+    `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n  <url><loc>${originOf(req)}/</loc><changefreq>monthly</changefreq></url>\n</urlset>\n`);
+});
+
+// No catch-all SPA fallback: unknown URLs are real 404s (no soft-404s / duplicate content)
+app.use((req, res) => {
+  if (req.path.startsWith('/api/')) return res.status(404).json({ error: 'Not found' });
+  res.status(404).type('html').send(
+    `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex"><title>404 — ExamPrepper</title></head><body style="font-family:system-ui;text-align:center;padding:60px 20px"><h1>404</h1><p>That page doesn't exist.</p><p><a href="/">← Back to ExamPrepper</a></p></body></html>`);
+});
 
 app.listen(PORT, () => {
   console.log(`ExamPrepper running → http://localhost:${PORT}`);

@@ -33,10 +33,16 @@ function toast(msg) {
 function applyTheme(t) {
   document.documentElement.setAttribute('data-theme', t);
   localStorage.setItem('theme', t);
-  document.getElementById('themeBtn').textContent = t === 'dark' ? '☀️' : '🌙';
+  for (const id of ['themeBtn', 'themeBtnLanding']) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = t === 'dark' ? '☀️' : '🌙';
+  }
 }
-document.getElementById('themeBtn').onclick = () =>
+const toggleTheme = () =>
   applyTheme(document.documentElement.getAttribute('data-theme') === 'dark' ? 'light' : 'dark');
+document.getElementById('themeBtn').onclick = toggleTheme;
+const landingThemeBtn = document.getElementById('themeBtnLanding');
+if (landingThemeBtn) landingThemeBtn.onclick = toggleTheme;
 applyTheme(localStorage.getItem('theme') || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
 
 // ---------- quiz state persistence (survives refresh; timer stays server-side) ----------
@@ -69,11 +75,17 @@ function sourceLink(q) {
 }
 
 // ---------- router ----------
+const VIEW_TITLES = {
+  dashboard: 'My topics', topic: 'Topic details', admin: 'Admin', quiz: 'Practice',
+  bank: 'Question bank', attempt: 'Attempt review'
+};
 async function go(view, arg) {
   Object.values(pollTimers).forEach(clearInterval); pollTimers = {};
   if (quiz?.timerInterval) clearInterval(quiz.timerInterval);
   document.removeEventListener('keydown', quizKeys);
   if (view !== 'results') quiz = null;
+  document.title = `${VIEW_TITLES[view] || 'ExamPrepper'} · ExamPrepper`;
+  window.scrollTo(0, 0);
   try {
     if (view === 'dashboard') return await renderDashboard();
     if (view === 'topic') return await renderTopicDetail(arg.topicId);
@@ -84,44 +96,54 @@ async function go(view, arg) {
   } catch (e) { toast(e.message); }
 }
 
-// ---------- auth ----------
-function renderAuth(mode = 'login') {
+// ---------- auth & landing ----------
+// Logged out → the static landing page is visible with the auth card embedded in its hero.
+// Logged in → landing is hidden and the SPA takes over.
+function showLanding(mode = 'login') {
+  document.documentElement.classList.remove('app-mode');
+  localStorage.removeItem('ep_auth');
   document.getElementById('header').style.display = 'none';
-  $app.innerHTML = `
-    <div class="auth-wrap">
-      <h1>🎓 Exam<span style="color:var(--primary)">Prepper</span></h1>
-      <div class="card">
-        <h2 style="margin-top:0">${mode === 'login' ? 'Log in' : 'Create account'}</h2>
-        <label>Username</label><input id="username" autocomplete="username">
-        <label>Password</label><input id="password" type="password" autocomplete="${mode === 'login' ? 'current-password' : 'new-password'}">
-        <button class="primary" id="authGo" style="width:100%;margin-top:20px;padding:12px">${mode === 'login' ? 'Log in' : 'Register'}</button>
-        <div class="auth-toggle">${mode === 'login'
-          ? `No account yet? <a href="#" id="authSwitch">Register</a>`
-          : `Already registered? <a href="#" id="authSwitch">Log in</a>`}</div>
-      </div>
-    </div>`;
-  document.getElementById('authSwitch').onclick = e => { e.preventDefault(); renderAuth(mode === 'login' ? 'register' : 'login'); };
+  document.getElementById('landing').style.display = '';
+  $app.innerHTML = '';
+  document.title = 'ExamPrepper — AI practice exams, mock tests & weak-spot drills';
+  renderAuth(mode);
+}
+
+function renderAuth(mode = 'login') {
+  const slot = document.getElementById('authCard');
+  slot.innerHTML = `
+    <h2 style="margin-top:0">${mode === 'login' ? 'Log in' : 'Create your free account'}</h2>
+    <label for="username">Username</label><input id="username" autocomplete="username">
+    <label for="password">Password</label><input id="password" type="password" autocomplete="${mode === 'login' ? 'current-password' : 'new-password'}">
+    <button class="primary" id="authGo" style="width:100%;margin-top:20px;padding:12px">${mode === 'login' ? 'Log in' : 'Create account'}</button>
+    <div class="auth-toggle">${mode === 'login'
+      ? `No account yet? <a href="#get-started" id="authSwitch">Register</a>`
+      : `Already registered? <a href="#get-started" id="authSwitch">Log in</a>`}</div>`;
+  slot.querySelector('#authSwitch').onclick = e => { e.preventDefault(); renderAuth(mode === 'login' ? 'register' : 'login'); };
   const submit = async () => {
     try {
       me = await api(mode === 'login' ? '/api/login' : '/api/register', {
         method: 'POST',
-        body: { username: document.getElementById('username').value, password: document.getElementById('password').value }
+        body: { username: slot.querySelector('#username').value, password: slot.querySelector('#password').value }
       });
       onLoggedIn();
     } catch (e) { toast(e.message); }
   };
-  document.getElementById('authGo').onclick = submit;
-  $app.querySelectorAll('input').forEach(i => i.addEventListener('keydown', e => { if (e.key === 'Enter') submit(); }));
+  slot.querySelector('#authGo').onclick = submit;
+  slot.querySelectorAll('input').forEach(i => i.addEventListener('keydown', e => { if (e.key === 'Enter') submit(); }));
 }
 
 function onLoggedIn() {
+  document.documentElement.classList.add('app-mode');
+  localStorage.setItem('ep_auth', '1');
+  document.getElementById('landing').style.display = 'none';
   document.getElementById('header').style.display = 'flex';
   document.getElementById('whoami').textContent = me.username;
   document.getElementById('adminBtn').style.display = me.is_admin ? '' : 'none';
   go('dashboard');
 }
 
-async function logout() { await api('/api/logout', { method: 'POST' }); me = null; renderAuth(); }
+async function logout() { await api('/api/logout', { method: 'POST' }); me = null; showLanding(); }
 
 // ---------- dashboard ----------
 function readinessBadge(r) {
@@ -172,8 +194,8 @@ function topicCard(t, isShared) {
         ${t.weak_count ? `<button onclick="go('quiz',{topicId:${t.id},mode:'weak'})" title="Drill the questions you keep getting wrong">🎯 Weak spots</button>` : ''}` : ''}
       ${!isShared && t.status !== 'generating' && !ready ? `
         <button onclick="generateQuestions(${t.id})">✨ Generate questions</button>` : ''}
-      <button class="ghost" onclick="go('topic',{topicId:${t.id}})" title="Details & history">📊</button>
-      ${!isShared ? `<button class="ghost" onclick="openTopicModal(${t.id})" title="Settings">⚙️</button>` : ''}
+      <button class="ghost" onclick="go('topic',{topicId:${t.id}})" title="Details & history" aria-label="Details and history">📊</button>
+      ${!isShared ? `<button class="ghost" onclick="openTopicModal(${t.id})" title="Settings" aria-label="Topic settings">⚙️</button>` : ''}
     </div>
   </div>`;
 }
@@ -387,7 +409,7 @@ function renderQuestion() {
       <div style="display:flex;gap:8px;align-items:center">
         ${quiz.mode === 'exam'
           ? `<div class="timer ${quiz.secondsLeft <= 60 ? 'low' : ''}" id="timer">${fmtTime(quiz.secondsLeft)}</div>
-             <button class="ghost" onclick="if(confirm('Leave the exam? Your answers are saved and the timer keeps running — resume from the dashboard.')){clearInterval(quiz.timerInterval);go('dashboard')}" title="Save & exit">⏸</button>`
+             <button class="ghost" onclick="if(confirm('Leave the exam? Your answers are saved and the timer keeps running — resume from the dashboard.')){clearInterval(quiz.timerInterval);go('dashboard')}" title="Save & exit" aria-label="Save and exit exam">⏸</button>`
           : `<button class="ghost" onclick="if(confirm('Leave this session? Progress will be discarded.'))abandonQuiz()">✕ Exit</button>`}
       </div>
     </div>
@@ -396,7 +418,7 @@ function renderQuestion() {
     <div class="card">
       <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start">
         <h2 style="margin-top:0;font-size:1.15rem">${esc(q.question)}</h2>
-        ${quiz.mode === 'exam' ? `<button class="ghost flag-btn ${quiz.flagged[q.id] ? 'on' : ''}" onclick="toggleFlag(${q.id})" title="Flag for review (F)">🚩</button>` : ''}
+        ${quiz.mode === 'exam' ? `<button class="ghost flag-btn ${quiz.flagged[q.id] ? 'on' : ''}" onclick="toggleFlag(${q.id})" title="Flag for review (F)" aria-label="Flag question for review">🚩</button>` : ''}
       </div>
       ${q.qtype === 'multi' ? `<p class="choose-hint">Select ${q.choose} answers</p>` : ''}
       ${questionBody(q, chosen, revealed)}
@@ -669,7 +691,7 @@ async function renderTopicDetail(topicId) {
           ${t.weak_count ? `<button onclick="go('quiz',{topicId:${t.id},mode:'weak'})">🎯 Weak spots (${t.weak_count})</button>` : ''}` : ''}
         ${t.is_owner ? `
           <button onclick="go('bank',{topicId:${t.id}})">🗂 Question bank</button>
-          <button class="ghost" onclick="openTopicModal(${t.id})" title="Settings">⚙️</button>` : ''}
+          <button class="ghost" onclick="openTopicModal(${t.id})" title="Settings" aria-label="Topic settings">⚙️</button>` : ''}
       </div>
     </div>
 
@@ -784,8 +806,8 @@ async function renderBank(topicId) {
             </div>
           </div>
           <div style="display:flex;gap:6px;flex-shrink:0">
-            <button class="ghost" onclick="openQuestionEditor(${topicId}, ${q.id})">✏️</button>
-            <button class="ghost" style="color:var(--red)" onclick="deleteQuestion(${topicId}, ${q.id})">🗑</button>
+            <button class="ghost" onclick="openQuestionEditor(${topicId}, ${q.id})" title="Edit question" aria-label="Edit question">✏️</button>
+            <button class="ghost" style="color:var(--red)" onclick="deleteQuestion(${topicId}, ${q.id})" title="Delete question" aria-label="Delete question">🗑</button>
           </div>
         </div>
       </div>`).join('')}`;
@@ -969,5 +991,5 @@ async function adminSaveKey() {
 // ---------- boot ----------
 (async () => {
   me = await api('/api/me');
-  if (me) onLoggedIn(); else renderAuth();
+  if (me) onLoggedIn(); else showLanding();
 })();

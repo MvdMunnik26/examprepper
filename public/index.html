@@ -2,22 +2,199 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ExamPrepper</title>
-  <link rel="stylesheet" href="/style.css">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>ExamPrepper — AI practice exams, mock tests & weak-spot drills</title>
+  <meta name="description" content="Generate practice exams for any topic with AI. Take timed mock tests, drill the questions you keep getting wrong, track your progress and walk into your exam ready.">
+  <link rel="canonical" href="__ORIGIN__/">
+  <meta name="theme-color" content="#f4f6fa" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0f1117" media="(prefers-color-scheme: dark)">
+
+  <!-- Open Graph / social -->
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="ExamPrepper">
+  <meta property="og:title" content="ExamPrepper — AI practice exams, mock tests & weak-spot drills">
+  <meta property="og:description" content="Generate practice exams for any topic with AI. Timed mock tests, weak-spot drills, progress tracking and an AI tutor for every answer.">
+  <meta property="og:url" content="__ORIGIN__/">
+  <meta property="og:image" content="__ORIGIN__/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="ExamPrepper — AI practice exams">
+  <meta name="twitter:description" content="AI-generated practice exams: mock tests, weak-spot drills and progress tracking.">
+  <meta name="twitter:image" content="__ORIGIN__/og-image.png">
+
+  <link rel="stylesheet" href="/style.css?v=2.1.0">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='80' font-size='80'>🎓</text></svg>">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+  <link rel="manifest" href="/manifest.webmanifest">
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "ExamPrepper",
+    "applicationCategory": "EducationalApplication",
+    "operatingSystem": "Web",
+    "description": "AI-powered exam preparation: generate practice questions for any topic, take timed mock exams, drill weak spots and track progress.",
+    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "EUR" },
+    "featureList": "AI question generation, timed mock exams, review mode, weak-spot drills, progress tracking, four question types, shared topics with leaderboards, AI tutor follow-ups"
+  }
+  </script>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": "How does ExamPrepper generate exam questions?",
+        "acceptedAnswer": { "@type": "Answer", "text": "You enter any exam topic — or paste your own study notes — and the AI researches it and writes a full question set with plausible distractors, an explanation for every answer and a verified source link to read more." }
+      },
+      {
+        "@type": "Question",
+        "name": "Which question types are supported?",
+        "acceptedAnswer": { "@type": "Answer", "text": "Classic multiple choice, multi-select (choose two), true/false and fill-in-the-blank. You can mix them per topic, edit any generated question, or write your own." }
+      },
+      {
+        "@type": "Question",
+        "name": "What is a weak-spot drill?",
+        "acceptedAnswer": { "@type": "Answer", "text": "ExamPrepper tracks every question you answer. The weak-spot drill re-tests exactly the questions you keep getting wrong until you answer each one correctly twice in a row." }
+      },
+      {
+        "@type": "Question",
+        "name": "Are the mock exams realistic?",
+        "acceptedAnswer": { "@type": "Answer", "text": "Yes — mock exams are timed server-side, answers stay hidden until you submit, and you get a question navigator with flag-for-review, just like real certification exam software. Sessions even survive a browser refresh." }
+      },
+      {
+        "@type": "Question",
+        "name": "Can I study together with others?",
+        "acceptedAnswer": { "@type": "Answer", "text": "Yes. Share a topic and everyone on your server can practice the same question set and compete on its leaderboard — the question set is generated once and reused." }
+      }
+    ]
+  }
+  </script>
+  <script>
+    // Skip the landing flash for returning logged-in users (set/cleared by app.js)
+    if (localStorage.getItem('ep_auth') === '1') document.documentElement.classList.add('app-mode');
+  </script>
 </head>
 <body>
   <header id="header" style="display:none">
     <div class="logo" onclick="go('dashboard')">🎓 Exam<span>Prepper</span></div>
     <div class="actions">
       <button class="ghost" id="adminBtn" style="display:none" onclick="go('admin')">Admin</button>
-      <button class="ghost" id="themeBtn" title="Toggle theme">🌙</button>
-      <span id="whoami" style="color:var(--text-dim);font-size:.9rem"></span>
+      <button class="ghost" id="themeBtn" title="Toggle theme" aria-label="Toggle dark or light theme">🌙</button>
+      <span id="whoami"></span>
       <button onclick="logout()">Log out</button>
     </div>
   </header>
+
+  <!-- Public landing page: real, crawlable content for logged-out visitors & search engines -->
+  <div id="landing">
+    <nav class="landing-nav" aria-label="Main">
+      <div class="logo">🎓 Exam<span>Prepper</span></div>
+      <div class="actions">
+        <button class="ghost" id="themeBtnLanding" title="Toggle theme" aria-label="Toggle dark or light theme">🌙</button>
+        <a class="btn-link" href="#get-started">Log in</a>
+      </div>
+    </nav>
+
+    <section class="hero">
+      <div class="hero-copy">
+        <h1>Ace your next exam with <span class="grad-text">AI-generated</span> practice tests</h1>
+        <p class="hero-sub">Type any topic — or paste your own study notes — and get a full practice exam in under a minute. Timed mock tests, instant explanations, weak-spot drills and progress tracking, all in one place.</p>
+        <div class="hero-ctas">
+          <a class="btn-primary-lg" href="#get-started">Get started — it's free</a>
+          <a class="btn-ghost-lg" href="#features">See what's inside ↓</a>
+        </div>
+        <ul class="hero-points">
+          <li>✔ Any subject, any language</li>
+          <li>✔ Explanations for every answer</li>
+          <li>✔ Works on phone, tablet &amp; desktop</li>
+        </ul>
+      </div>
+      <div class="hero-auth" id="get-started">
+        <div class="card auth-card"><div id="authCard"></div></div>
+      </div>
+    </section>
+
+    <section class="features" id="features" aria-labelledby="features-h">
+      <h2 id="features-h">Everything you need to pass</h2>
+      <div class="feature-grid">
+        <div class="feature">
+          <div class="f-icon">✨</div>
+          <h3>AI question generation</h3>
+          <p>Name a topic — "AWS Solutions Architect", "Dutch history", "TCP/IP" — and get a complete question set with plausible distractors and difficulty levels.</p>
+        </div>
+        <div class="feature">
+          <div class="f-icon">📄</div>
+          <h3>Your own study material</h3>
+          <p>Paste your notes, syllabus or a textbook chapter and the questions are based on <em>your</em> course — not generic knowledge.</p>
+        </div>
+        <div class="feature">
+          <div class="f-icon">⏱</div>
+          <h3>Realistic mock exams</h3>
+          <p>Server-side timer, hidden answers, a question navigator with flag-for-review — and your session survives a refresh.</p>
+        </div>
+        <div class="feature">
+          <div class="f-icon">🎯</div>
+          <h3>Weak-spot drills</h3>
+          <p>The app remembers every question you miss and drills it until you get it right twice in a row. Study what you don't know yet.</p>
+        </div>
+        <div class="feature">
+          <div class="f-icon">📊</div>
+          <h3>Progress you can see</h3>
+          <p>Score trends per topic, attempt history and a readiness indicator that tells you when you're consistently passing.</p>
+        </div>
+        <div class="feature">
+          <div class="f-icon">🤖</div>
+          <h3>An AI tutor on call</h3>
+          <p>Every explanation has a follow-up box. Ask "why is B wrong here?" and get a clear answer in context. Plus verified source links.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="steps" aria-labelledby="steps-h">
+      <h2 id="steps-h">How it works</h2>
+      <ol class="step-list">
+        <li><span class="step-n">1</span><h3>Add your topic</h3><p>Give it an exam subject and optionally your own study material. Pick difficulty, question types and exam length.</p></li>
+        <li><span class="step-n">2</span><h3>Practice your way</h3><p>Relaxed review with instant feedback, a timed mock exam, or a weak-spot drill targeting your mistakes.</p></li>
+        <li><span class="step-n">3</span><h3>Watch yourself get ready</h3><p>Your trend chart climbs, the weak pool shrinks, and the readiness badge flips to "exam ready". Good luck — you won't need it.</p></li>
+      </ol>
+    </section>
+
+    <section class="faq" aria-labelledby="faq-h">
+      <h2 id="faq-h">Frequently asked questions</h2>
+      <details>
+        <summary>How does ExamPrepper generate exam questions?</summary>
+        <p>You enter any exam topic — or paste your own study notes — and the AI researches it and writes a full question set with plausible distractors, an explanation for every answer and a verified source link to read more.</p>
+      </details>
+      <details>
+        <summary>Which question types are supported?</summary>
+        <p>Classic multiple choice, multi-select ("choose TWO"), true/false and fill-in-the-blank. You can mix them per topic, edit any generated question, or write your own.</p>
+      </details>
+      <details>
+        <summary>What is a weak-spot drill?</summary>
+        <p>ExamPrepper tracks every question you answer. The weak-spot drill re-tests exactly the questions you keep getting wrong until you answer each one correctly twice in a row.</p>
+      </details>
+      <details>
+        <summary>Are the mock exams realistic?</summary>
+        <p>Yes — mock exams are timed server-side, answers stay hidden until you submit, and you get a question navigator with flag-for-review, just like real certification exam software. Sessions even survive a browser refresh.</p>
+      </details>
+      <details>
+        <summary>Can I study together with others?</summary>
+        <p>Yes. Share a topic and everyone on your server can practice the same question set and compete on its leaderboard — the question set is generated once and reused.</p>
+      </details>
+    </section>
+
+    <footer class="landing-footer">
+      <p>🎓 <strong>ExamPrepper</strong> — AI-powered exam preparation.
+      <a href="https://github.com/MvdMunnik26/examprepper" rel="noopener" target="_blank">Open source on GitHub</a></p>
+    </footer>
+  </div>
+
   <main id="app"></main>
-  <script src="/app.js"></script>
+  <noscript><p style="text-align:center;padding:20px">ExamPrepper needs JavaScript to run the practice app — the information above describes what it does.</p></noscript>
+  <script src="/app.js?v=2.1.0" defer></script>
 </body>
 </html>

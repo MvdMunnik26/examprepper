@@ -22,6 +22,8 @@ An AI-powered exam preparation webapp. Add any exam topic, and Claude researches
 - **Deep dives** — every explanation links to a verified source page about that question's concept, plus a web search fallback.
 - **Admin section** — manage users (promote/demote admin, reset passwords, delete), manage all exam topics, and configure the API key.
 - **Dark & light theme** — toggle with the 🌙/☀️ button; your choice is remembered.
+- **Mobile-first & installable** — fully responsive (bottom-sheet dialogs, thumb-reach quiz controls, big tap targets) with a web manifest so it can be added to a phone's home screen.
+- **Search-engine ready** — a crawlable public landing page with structured data (SoftwareApplication + FAQ), Open Graph/social cards, sitemap.xml, robots.txt, canonical URLs, gzip compression and long-lived asset caching.
 
 ## Requirements
 
